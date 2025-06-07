@@ -9,26 +9,6 @@ jobs:
   build:
     runs-on: self-hosted
 
-    env:  
-      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-
-    services:  
-      postgres:
-        image: postgres:15  
-        env:
-          POSTGRES_DB: ${{ env.POSTGRES_DB }}
-          POSTGRES_USER: ${{ env.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-        ports:
-          - 5432:5432  
-        options: >- 
-          --health-cmd "pg_isready -U ${{ env.POSTGRES_USER }}"
-          --health-interval 15s
-          --health-timeout 10s
-          --health-retries 5
-          
     steps:
     - uses: actions/checkout@v4
     - name: Build Docker image
@@ -38,12 +18,8 @@ jobs:
     runs-on: self-hosted
     needs: build
 
-    env:  
-      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-
     steps:
+    - uses: actions/checkout@v4
     - name: Start services
       run: docker-compose up -d
     - name: Run tests inside container
@@ -52,17 +28,19 @@ jobs:
       run: docker-compose down
 
   deploy:
-    runs-on: self-hosted
+    name: Deploy
+    runs-on: ubuntu-latest
     needs: test
 
-    env:  
-      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-
     steps:
-    - uses: actions/checkout@v4
-    - name: Deploy application
-      run: |
-        docker-compose down
-        docker-compose up -d
+    - name: SSH Deploy
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          cd /app
+          git pull
+          docker-compose down
+          docker-compose up -d
