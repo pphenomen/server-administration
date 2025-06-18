@@ -27,9 +27,9 @@ jobs:
   deploy:
     needs: [build, test]
     runs-on: self-hosted
-
+  
     steps:
-      - name: SSH Deploy
+      - name: Deploy via Podman
         uses: appleboy/ssh-action@v0.1.5
         with:
           debug: true
@@ -38,7 +38,8 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.PORT }}
           script: |
+            set -eux
             cd /home/${{ secrets.USER }}/tasks/docker
-            docker-compose -f docker-compose.prod.yml pull
-            docker-compose -f docker-compose.prod.yml down
-            docker-compose -f docker-compose.prod.yml up -d
+            podman-compose down -v
+            podman-compose build
+            podman-compose up -d
