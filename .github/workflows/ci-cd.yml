@@ -47,7 +47,8 @@ jobs:
       env:
         DATABASE_URL: "postgresql+psycopg://kubsu:kubsu@localhost:5432/kubsu"
       run: |
-        pytest tests/ --disable-warnings
+        find . -name "test_*.py" -o -name "*_test.py"
+        pytest --pyargs $(find . -name "test_*.py" -o -name "*_test.py" | tr '\n' ' ') --disable-warnings
 
   deploy:
     needs: [build, test]
