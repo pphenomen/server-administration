@@ -29,14 +29,14 @@ jobs:
     runs-on: self-hosted
 
     steps:
-    - name: SSH Deploy
-      uses: appleboy/ssh-action@main
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USER }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        script: |
-          cd /home/${{ secrets.USER }}/tasks/docker
-          docker-compose -f docker-compose.prod.yml pull
-          docker-compose -f docker-compose.prod.yml down
-          docker-compose -f docker-compose.prod.yml up -d
+      - name: SSH Deploy
+        uses: appleboy/ssh-action@v0.1.5
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /home/${{ secrets.USER }}/tasks/docker
+            docker-compose -f docker-compose.prod.yml pull
+            docker-compose -f docker-compose.prod.yml down
+            docker-compose -f docker-compose.prod.yml up -d
