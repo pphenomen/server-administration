@@ -61,7 +61,7 @@ jobs:
         username: ${{ secrets.USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          cd /home/${{ secrets.SERVER_USERNAME }}/tasks/docker
+          cd /home/${{ secrets.USER }}/tasks/docker
           docker-compose -f docker-compose.prod.yml pull
           docker-compose -f docker-compose.prod.yml down
           docker-compose -f docker-compose.prod.yml up -d
