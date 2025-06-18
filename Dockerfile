@@ -1,24 +1,11 @@
-# Stage 1: Build
-FROM python:3.11-slim as builder
+FROM python:3.10-alpine
+
+RUN apk update && apk upgrade
 
 WORKDIR /app
-
-COPY pyproject.toml ./
-
-RUN pip install .[test]
-
 COPY . .
 
-# Stage 2: Production image
-FROM python:3.11-slim
-
-RUN useradd -m appuser
-
-WORKDIR /app
-COPY --from=builder /app /app
-
-RUN pip install --no-cache-dir .
-
-USER appuser
+RUN pip install .
+RUN pip install pytest>=6.2.5 pytest-asyncio==0.25.3 httpx==0.28.1
 
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8016"]
