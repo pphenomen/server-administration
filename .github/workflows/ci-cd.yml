@@ -6,43 +6,52 @@ on:
 
 jobs:
   build:
+    name: Build
     runs-on: self-hosted
-
     steps:
-    - uses: actions/checkout@v4
-    - name: Build Docker image
-      run: docker-compose build
+      - name: Add all repository
+        uses: actions/checkout@v3
+
+      - name: Build all images
+        run: docker-compose build
+      
+      - name: Check existence images
+        run: |
+          docker image inspect postgres:15-alpine
 
   test:
+    name: Testing
     runs-on: self-hosted
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: kubsu
-          POSTGRES_USER: kubsu
-          POSTGRES_PASSWORD: kubsu
-        ports:
-          - "5432:5432"
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
+    needs: build
+    env:
+      DB_USER: kubsu
+      DB_PASSWORD: kubsu
+      DB_NAME: kubsu
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-    
-    - name: Run tests
-      env:
-        DATABASE_URL: "postgresql+psycopg://kubsu:kubsu@localhost:5432/kubsu"
-      run: |
-        pytest --disable-warnings
+      - uses: actions/checkout@v3
+      
+      - name: Build test image
+        run: docker-compose build test
+      
+      - name: Start dependencies
+        run: docker-compose up -d db 
+      
+      - name: Wait for Postgres
+        run: |
+          for i in {1..5}; do
+            docker-compose exec -T db pg_isready -U kubsu && break
+            echo "Waiting for Postgres: ($i/5)"
+            sleep 10
+          done
+      
+      - name: Run tests
+        run: docker-compose run --rm test
+      
+      - name: Cleanup
+        run: docker-compose down -v
+      
+      - name: Clean working directory
+        run: rm -rf $GITHUB_WORKSPACE/* 
 
   deploy:
     needs: [build, test]
