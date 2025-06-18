@@ -1,1 +1,6 @@
-/docker/actions-runner
+.idea/
+__pycache__/
+*.py[cod]
+actions-runner/
+
+.env
