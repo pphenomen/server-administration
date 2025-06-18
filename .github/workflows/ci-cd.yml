@@ -32,6 +32,7 @@ jobs:
       - name: SSH Deploy
         uses: appleboy/ssh-action@v0.1.5
         with:
+          debug: true
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
