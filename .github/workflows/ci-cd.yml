@@ -40,8 +40,8 @@ jobs:
         
     - name: Install dependencies
       run: |
-        pip install -e .[test]
-        pip install psycopg-binary
+        python -m pip install --upgrade pip setuptools wheel
+        pip install .[test]
         
     - name: Run tests
       env:
