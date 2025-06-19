@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI/CD Pipeline with Docker Save/Load
 
 on:
   push:
@@ -7,37 +7,53 @@ on:
 jobs:
   build:
     runs-on: self-hosted
+    outputs:
+      image-artifact-name: docker-image.tar
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build Docker image
-        run: docker-compose build
+        run: |
+          docker build -t your-image-name:latest .
 
-      - name: Push image
-        run: docker push ghcr.io/${{ github.repository_owner }}/your-image-name:latest
+      - name: Save Docker image to tar
+        run: docker save your-image-name:latest -o docker-image.tar
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: docker-image.tar
 
   test:
     runs-on: self-hosted
     needs: build
     steps:
       - uses: actions/checkout@v4
-      - name: Pull and run tests
-        run: |
-          docker pull ghcr.io/${{ github.repository_owner }}/your-image-name:latest
-          docker run --rm ghcr.io/${{ github.repository_owner }}/your-image-name:latest pytest
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: .
+
+      - name: Load Docker image
+        run: docker load -i docker-image.tar
+
+      - name: Run tests
+        run: docker run --rm your-image-name:latest pytest
 
   deploy:
     runs-on: self-hosted
-    needs: [build, test]
+    needs: test
     steps:
-      - name: Deploy via Podman
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: .
+
+      - name: Deploy via SSH and Podman
         uses: appleboy/ssh-action@v0.1.5
         with:
           host: ${{ secrets.HOST }}
@@ -45,7 +61,16 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.PORT }}
           script: |
-            podman pull ghcr.io/${{ github.repository_owner }}/your-image-name:latest
+            set -eux
+            # Копируем tar-файл на сервер
+            scp -P ${{ secrets.PORT }} docker-image.tar ${{ secrets.USER }}@${{ secrets.HOST }}:/tmp/docker-image.tar
+
+            # Загружаем образ в Podman
+            podman load -i /tmp/docker-image.tar
+
+            # Останавливаем и удаляем старый контейнер, если есть
             podman stop your-container-name || true
             podman rm your-container-name || true
-            podman run -d --name your-container-name -p 8016:8016 ghcr.io/${{ github.repository_owner }}/your-image-name:latest
+
+            # Запускаем новый контейнер
+            podman run -d --name your-container-name -p 8016:8016 your-image-name:latest
