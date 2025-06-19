@@ -1,76 +1,73 @@
-name: CI/CD Pipeline with Docker Save/Load
+name: CI-CD  
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
 
 jobs:
-  build:
-    runs-on: self-hosted
-    outputs:
-      image-artifact-name: docker-image.tar
+  build-test-deploy: 
+    runs-on: self-hosted 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Build Docker image
+      # Запуск PostgreSQL контейнера
+      - name: Start PostgreSQL container
         run: |
-          docker build -t your-image-name:latest .
+          sudo docker run -d --name postgres \
+            -e POSTGRES_DB=kubsu \
+            -e POSTGRES_USER=kubsu \
+            -e POSTGRES_PASSWORD=kubsu \
+            -p 5432:5432 \
+            postgres:14
+          # Ожидание инициализации
+          sleep 10
 
-      - name: Save Docker image to tar
-        run: docker save your-image-name:latest -o docker-image.tar
+      # Ожидание готовности PostgreSQL
+      - name: Wait for PostgreSQL
+        run: |
+          echo "Waiting for PostgreSQL to start..."
+          until sudo docker exec postgres pg_isready -U kubsu; do
+            sleep 3
+          done
+          echo "PostgreSQL is ready!"
 
-      - name: Upload Docker image artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-image
-          path: docker-image.tar
-
-  test:
-    runs-on: self-hosted
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download Docker image artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: docker-image
-          path: .
-
-      - name: Load Docker image
-        run: docker load -i docker-image.tar
+      # Сборка и тестирование
+      - name: Build test Docker image
+        run: sudo docker build --target builder -t myapp:test .
 
       - name: Run tests
-        run: docker run --rm your-image-name:latest pytest
+        run: |
+          sudo docker run --rm \
+            --network host \
+            -e PYTHONPATH=/app \
+            myapp:test pytest tests
 
-  deploy:
-    runs-on: self-hosted
-    needs: test
-    steps:
-      - name: Download Docker image artifact
-        uses: actions/download-artifact@v4
+      # Сборка финального образа
+      - name: Build production Docker image
+        run: sudo docker build -t myapp:final .
+
+      # Настройка SSH для деплоя
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.5.4 
         with:
-          name: docker-image
-          path: .
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Deploy via SSH and Podman
-        uses: appleboy/ssh-action@v0.1.5
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.PORT }}
-          script: |
-            set -eux
-            # Копируем tar-файл на сервер
-            scp -P ${{ secrets.PORT }} docker-image.tar ${{ secrets.USER }}@${{ secrets.HOST }}:/tmp/docker-image.tar
-
-            # Загружаем образ в Podman
-            podman load -i /tmp/docker-image.tar
-
-            # Останавливаем и удаляем старый контейнер, если есть
-            podman stop your-container-name || true
-            podman rm your-container-name || true
-
-            # Запускаем новый контейнер
-            podman run -d --name your-container-name -p 8016:8016 your-image-name:latest
+      # Деплой на удаленный сервер
+      - name: Deploy to remote server
+        run: |
+          # Экспорт образа и загрузка на удаленный сервер
+          sudo docker save myapp:final | ssh -o StrictHostKeyChecking=no \
+            -p ${{ secrets.SSH_PORT }} \
+            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} \
+            "podman load && podman tag myapp:final myapp:final"
+          
+          # Остановка и запуск контейнера
+          ssh -o StrictHostKeyChecking=no \
+            -p ${{ secrets.SSH_PORT }} \
+            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} \
+            "podman stop myapp || true && \
+             podman rm myapp || true && \
+             podman run -d --name myapp \
+             --network=host \
+             myapp:final"
