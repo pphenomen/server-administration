@@ -11,7 +11,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Запуск PostgreSQL контейнера
       - name: Start PostgreSQL container
         run: |
           sudo docker run -d --name postgres \
@@ -23,7 +22,6 @@ jobs:
           # Ожидание инициализации
           sleep 10
 
-      # Ожидание готовности PostgreSQL
       - name: Wait for PostgreSQL
         run: |
           echo "Waiting for PostgreSQL to start..."
@@ -32,7 +30,6 @@ jobs:
           done
           echo "PostgreSQL is ready!"
 
-      # Сборка и тестирование
       - name: Build test Docker image
         run: sudo docker build --target builder -t myapp:test .
 
@@ -43,11 +40,9 @@ jobs:
             -e PYTHONPATH=/app \
             myapp:test pytest tests
 
-      # Сборка финального образа
       - name: Build production Docker image
         run: sudo docker build -t myapp:final .
 
-      # Настройка SSH для деплоя
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.5.4 
         with:
@@ -58,14 +53,14 @@ jobs:
         run: |
           # Экспорт образа и загрузка на удаленный сервер
           sudo docker save myapp:final | ssh -o StrictHostKeyChecking=no \
-            -p ${{ secrets.SSH_PORT }} \
-            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} \
+            -p ${{ secrets.PORT }} \
+            ${{ secrets.USER }}@${{ secrets.HOST }} \
             "podman load && podman tag myapp:final myapp:final"
           
           # Остановка и запуск контейнера
           ssh -o StrictHostKeyChecking=no \
-            -p ${{ secrets.SSH_PORT }} \
-            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} \
+            -p ${{ secrets.PORT }} \
+            ${{ secrets.USER }}@${{ secrets.HOST }} \
             "podman stop myapp || true && \
              podman rm myapp || true && \
              podman run -d --name myapp \
